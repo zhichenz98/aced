@@ -9,8 +9,8 @@ import warnings
 import os
 warnings.filterwarnings("ignore")
 
-device = torch.device('cuda:5' if torch.cuda.is_available() else 'cpu')
-append_type = True
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 ## Load data
 def get_path(setting, idx, sig, bias):
     if setting=='small':
@@ -54,7 +54,7 @@ def get_path(setting, idx, sig, bias):
     return nodes, b_path, g_path, branch_path, feat_path
 
 
-def load_data(set_name='small', idx=0, sig=0.01, bias=0.00):
+def load_data(set_name='small', idx=0, sig=0.01, bias=0.00, append_type=True):
     
     train_nodes, train_b_path, train_g_path, train_branch_path, train_feat_path = get_path(set_name, idx, sig, bias)
 
