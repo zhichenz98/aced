@@ -194,3 +194,76 @@ def mmd_loss(source, target):
     mind = min(source.shape[0], target.shape[0])
     domain_loss = mmd_rbf_noaccelerate(source[:mind], target[:mind])
     return domain_loss
+
+
+import ot
+from ot.utils import unif
+from ot.gromov._utils import update_square_loss
+import random
+
+def get_intermediate_graphs(train_graphs, test_graphs, lams, num_graphs=100):
+    input_graphs = [(random.choice(train_graphs), random.choice(test_graphs)) for _ in range(num_graphs)]
+    mixed_graphs = []
+    for lam in lams:
+        mixed_graphs.append([])
+        for i, (g_s, g_t) in enumerate(input_graphs):
+            tmp_graphs = get_one_graph(g_s, g_t, lam)
+            mixed_graphs[-1].append(tmp_graphs)
+    return mixed_graphs
+
+def get_one_graph(g_s, g_t, lam):
+    feat_s = g_s.x[:, :-1]  # Exclude the last column (mask)
+    feat_t = g_t.x[:, :-1]  # Exclude the last column (mask)
+    N = min(feat_s.size(0), feat_t.size(0))
+    edge_attr_s = g_s.edge_attr
+    edge_attr_t = g_t.edge_attr
+    edge_index_s = g_s.edge_index
+    edge_index_t = g_t.edge_index
+    
+    # Compute edge costs
+    edge_cost_s = edge_attr_s.mean(dim=1)
+    edge_cost_t = edge_attr_t.mean(dim=1)
+    C_s = torch.zeros((feat_s.size(0), feat_s.size(0)), dtype=edge_cost_s.dtype, device=edge_cost_s.device)
+    C_t = torch.zeros((feat_t.size(0), feat_t.size(0)), dtype=edge_cost_t.dtype, device=edge_cost_t.device)
+    C_s[edge_index_s[0], edge_index_s[1]] = edge_cost_s
+    C_t[edge_index_t[0], edge_index_t[1]] = edge_cost_t
+    
+    lambdas = [1-lam, lam]
+    p = unif(N, type_as=edge_cost_s)
+    feat_b, _, log_ = ot.gromov.entropic_fused_gromov_barycenters(N, [feat_s, feat_t], [C_s, C_t],loss_fun='square_loss', log=True)
+    feat_b = torch.cat([feat_b, torch.ones((N, 1), dtype=feat_s.dtype, device=feat_s.device)], dim=-1)  # Add mask column
+    
+    nx = ot.backend.get_backend(feat_s)
+    intra_b = torch.zeros((N, N, edge_attr_s.size(1)), dtype=edge_attr_s.dtype, device=edge_attr_s.device)
+    for i in range(edge_attr_s.size(1)):
+        intra_s = torch.zeros((feat_s.size(0), feat_s.size(0)), dtype=edge_attr_s.dtype, device=edge_attr_s.device)
+        intra_t = torch.zeros((feat_t.size(0), feat_t.size(0)), dtype=edge_attr_t.dtype, device=edge_attr_t.device)
+        intra_s[edge_index_s[0], edge_index_s[1]] = edge_attr_s[:,i]
+        intra_t[edge_index_t[0], edge_index_t[1]] = edge_attr_t[:,i]
+        intra_b[:,:, i] = update_square_loss(p, lambdas, log_['T'], [intra_s, intra_t], nx)
+    
+    ## 构建data
+    # 找出非零边的位置（也可以设定阈值）
+    # edge_mask: (n, n), True 表示存在边
+    edge_mask = intra_b.abs().sum(dim=2) > 0  # shape: (n, n)
+
+    # 获取边的索引 (i,j)
+    src, dst = edge_mask.nonzero(as_tuple=True)  # shape: (m,), (m,)
+
+    # 构造 edge_index: shape (2, m)
+    edge_index = torch.stack([src, dst], dim=0)
+
+    # 提取 edge_attr: shape (m, h)
+    edge_attr = intra_b[src, dst]  # index 2D tensor -> shape: (m, h)
+    
+    data = Data(x=feat_b, edge_index=edge_index, edge_attr=edge_attr)
+    
+    return data
+    
+    
+    
+    
+    
+    
+    
+    
