@@ -1,2 +1,4 @@
 .idea/
 .gitignore
+notebook/
+**/.DS_Store
