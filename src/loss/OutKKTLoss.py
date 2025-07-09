@@ -53,13 +53,13 @@ class OurKKTLoss(nn.Module):
         sbus_idx: int = env['sbus_idx']  # index of (the only) slack bus
         gbus_idx = torch.LongTensor(env['gbus_idx'])  # list of int -> torch.LongTensor, indices of generators
 
-        n_line: int = env['n_line']  # int, number of lines
+        n_line: int = env['n_line']  # number of lines
 
-        G = torch.Tensor(env['G'])  # (n_bus, n_bus), conductance
-        B = torch.Tensor(env['B'])  # (n_bus, n_bus), susceptance
+        G = torch.Tensor(env['G'])  # (n_bus, n_bus), conductance matrix
+        B = torch.Tensor(env['B'])  # (n_bus, n_bus), susceptance matrix
         branches = torch.LongTensor(env['branches'])  # (n_line, 2), starting and ending indices of branches
-        G_line = G[branches[:, 0], branches[:, 1]]
-        B_line = B[branches[:, 0], branches[:, 1]]
+        G_line = G[branches[:, 0], branches[:, 1]]  # (n_line, ), conductance of each branch
+        B_line = B[branches[:, 0], branches[:, 1]]  # (n_line, ), susceptance of each branch
 
         P_g_max = torch.Tensor(env['P_g_max'])  # (n_gbus, ), active power generation upper bound
         P_g_min = torch.Tensor(env['P_g_min'])  # (n_gbus, ), active power generation lower bound
@@ -80,6 +80,7 @@ class OurKKTLoss(nn.Module):
         # Notice that `KKT_error` should be a Tensor of shape (bs, ), bs is batch size
 
         # 1. Reference bus
+        # equality constraints
         KKT_error = torch.abs(V_i[:, sbus_idx])  # imaginary part should be zero, i.e., angle = 0
 
         # 2. Powerflow Equation
@@ -92,6 +93,7 @@ class OurKKTLoss(nn.Module):
         Q_inj = (V_i.T * (G @ V_r.T - B @ V_i.T) - V_r.T * (
                     G @ V_i.T + B @ V_r.T)).T  # (bs, n_bus), reactive power injection
 
+        # equality constraints
         KKT_error += (P_inj + P_l - P_g).abs().sum(dim=1)
         KKT_error += (Q_inj + Q_l - Q_g).abs().sum(dim=1)
 
@@ -102,6 +104,7 @@ class OurKKTLoss(nn.Module):
         P_g_gbus = P_g[:, gbus_idx]
         Q_g_gbus = Q_g[:, gbus_idx]
 
+        # inequality constraints
         KKT_error += (torch.relu(P_g_gbus - P_g_max)).sum(dim=1)
         KKT_error += (torch.relu(P_g_min - P_g_gbus)).sum(dim=1)
         KKT_error += (torch.relu(Q_g_gbus - Q_g_max)).sum(dim=1)
@@ -110,6 +113,7 @@ class OurKKTLoss(nn.Module):
         # 4. Voltage Violation
         V_mag_sq = V_r ** 2 + V_i ** 2
 
+        # inequality constraints
         KKT_error += (torch.relu(V_mag_sq - V_max ** 2)).sum(dim=1)
         KKT_error += (torch.relu(V_min ** 2 - V_mag_sq)).sum(dim=1)
 
@@ -125,6 +129,7 @@ class OurKKTLoss(nn.Module):
 
         I_mag_sq = I_r ** 2 + I_i ** 2
 
+        # inequality constraints
         KKT_error += (torch.relu(I_mag_sq - I_max ** 2)).sum(dim=1)
 
         return KKT_error
