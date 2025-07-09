@@ -42,6 +42,10 @@ class OurKKTLoss(nn.Module):
             # Topology info
             env: dict = None,
     ):
+        """
+        Return: KKT_error: torch.Tensor, size = (bs, )
+        """
+
         ######## ######## ######## ######## ######## ######## ######## ########
         # Preparation for the Environment
         ######## ######## ######## ######## ######## ######## ######## ########
