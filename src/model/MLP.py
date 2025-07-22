@@ -12,7 +12,6 @@ class MLP(nn.Module):
             hidden_dim: int = 64,
             n_layers: int = 2,
             activation: str = 'relu',
-            dropout: float = 0.0,
     ):
         super().__init__()
         self.n_nodes = n_nodes
@@ -26,6 +25,12 @@ class MLP(nn.Module):
 
         if activation == 'relu':
             activation = nn.ReLU()
+        elif activation == 'gelu':
+            activation = nn.GELU()
+        elif activation == 'tanh':
+            activation = nn.Tanh()
+        elif activation == 'sigmoid':
+            activation = nn.Sigmoid()
         else:
             raise NotImplementedError
 
