@@ -96,6 +96,12 @@ class OurKKTLoss(nn.Module):
         KKT_error += (P_inj + P_l - P_g).abs().sum(dim=1)
         KKT_error += (Q_inj + Q_l - Q_g).abs().sum(dim=1)
 
+        # print((P_inj + P_l - P_g)[0])
+        # print('P_inj', P_inj[0])
+        # print('P_l', P_l[0])
+        # print('P_g', P_g[0])
+        # exit()
+
         print('2', KKT_error.mean())
 
         # 3. Power Generation Violation
@@ -209,10 +215,10 @@ def load_env_mat(mat_path: str, device="cpu", dtype=torch.float32):
         B_line=B_line,
         V_min=V_min,
         V_max=V_max,
-        P_g_min=P_g_min,
-        P_g_max=P_g_max,
-        Q_g_min=Q_g_min,
-        Q_g_max=Q_g_max,
+        P_g_min=P_g_min / 100,
+        P_g_max=P_g_max / 100,
+        Q_g_min=Q_g_min / 100,
+        Q_g_max=Q_g_max / 100,
         S_max=S_max,
         baseMVA=baseMVA,
     )

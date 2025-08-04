@@ -51,15 +51,15 @@ def load_and_preprocess(env, args, normalize=False):
     #     mean = None
     #     std = None
 
-    X_tr = np.stack([df_tr[P_d_columns].values, df_tr[Q_d_columns].values], axis=2)
-    X_val = np.stack([df_val[P_d_columns].values, df_val[Q_d_columns].values], axis=2)
+    X_tr = np.stack([df_tr[P_d_columns].values / 100, df_tr[Q_d_columns].values / 100], axis=2)
+    X_val = np.stack([df_val[P_d_columns].values / 100, df_val[Q_d_columns].values / 100], axis=2)
     Y_tr = np.stack(
         [df_tr[V_r_columns].values, df_tr[V_i_columns].values,
-         df_tr[P_g_columns].values, df_tr[Q_g_columns].values],
+         df_tr[P_g_columns].values / 100, df_tr[Q_g_columns].values / 100],
         axis=2)
     Y_val = np.stack(
         [df_val[V_r_columns].values, df_val[V_i_columns].values,
-         df_val[P_g_columns].values, df_val[Q_g_columns].values],
+         df_val[P_g_columns].values / 100, df_val[Q_g_columns].values / 100],
         axis=2)
 
     dataset_tr = TensorDataset(torch.from_numpy(X_tr), torch.from_numpy(Y_tr))
@@ -156,7 +156,7 @@ def main(args):
 
                 if i == 0:
                     print(sup_loss.item(), unsup_loss.item())
-                loss = sup_loss + unsup_loss / 10000
+                loss = sup_loss + unsup_loss
 
             else:
                 loss = sup_loss
