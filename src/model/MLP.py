@@ -7,7 +7,7 @@ class MLP(nn.Module):
     def __init__(
             self,
             n_nodes: int,
-            n_feats: int = 4,
+            n_feats: int = 2,
             n_outputs: int = 4,
             hidden_dim: int = 64,
             n_layers: int = 2,
