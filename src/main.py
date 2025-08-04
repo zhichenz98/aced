@@ -68,6 +68,34 @@ def load_and_preprocess(env, args, normalize=False):
     return dataset_tr, dataset_val
 
 
+def test_kkt_loss(args):
+    # load env
+    env = load_env_mat(mat_path=args.env_path, device=args.device, dtype=args.dtype)
+    if 'n_bus' not in env:
+        env['n_bus'] = len(env['V_max'])
+
+    # load data, build dataloader
+    dataset_tr, dataset_val = load_and_preprocess(env, args)
+    dataloader_tr = DataLoader(dataset_tr, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    dataloader_val = DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+
+    unsupervised_loss_func = OurKKTLoss(env=env)
+
+    for i, (X, Y) in enumerate(tqdm(dataloader_val)):
+        X, Y = X.to(device=args.device, dtype=args.dtype), Y.to(device=args.device, dtype=args.dtype)
+
+        V_r, V_i, P_g, Q_g = torch.unbind(Y, dim=2)  # (bs, n_node, 4) to 4 * (bs, n_node)
+        P_d, Q_d = torch.unbind(X, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
+
+        unsup_loss = unsupervised_loss_func(V_r, V_i, P_g, Q_g, P_d, Q_d).mean()
+
+        print(unsup_loss)
+
+    exit()
+
+
+
+
 def main(args):
     # load env
     env = load_env_mat(mat_path=args.env_path, device=args.device, dtype=args.dtype)
@@ -221,4 +249,5 @@ if __name__ == '__main__':
     args = args_parser()
     setup_seed(args.seed)
     torch.set_num_threads(args.num_threads)
-    main(args)
+    # main(args)
+    test_kkt_loss(args)
