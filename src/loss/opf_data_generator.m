@@ -27,7 +27,7 @@ function generate_data()
         for sigma = sigma_values
             for bias = bias_values
                 fprintf('Processing topo_id=%s, sigma=%.2f, bias=%.2f\n', topo_id, sigma, bias);
-                run_opf(topo_id, sigma, bias, output_dir);
+                %run_opf(topo_id, sigma, bias, output_dir);
             end
         end
     end
@@ -231,6 +231,15 @@ function save_env(mpc, topo_id, output_dir)
 
     baseMVA = mpc.baseMVA;
 
+    P_g_base = mpc.gen(:, PG);
+    Q_g_base = mpc.gen(:, QG);
+    P_d_base = mpc.bus(:, PD);
+    Q_d_base = mpc.bus(:, QD);
+    V_m_base = mpc.bus(:, VM);
+    V_angle_base = mpc.bus(:, VA);
+    V_r_base = V_m_base .* cosd(V_angle_base);
+    V_i_base = V_m_base .* sind(V_angle_base);
+
     % ---- Save .mat ----
     env = struct();
     env.G = G; env.B = B;
@@ -244,6 +253,15 @@ function save_env(mpc, topo_id, output_dir)
     env.load_bus_idx = load_bus_idx;
     env.slack_bus_idx = slack_bus_idx;
     env.baseMVA = baseMVA;
+
+    env.P_g_base = P_g_base;
+    env.Q_g_base = Q_g_base;
+    env.P_d_base = P_d_base;
+    env.Q_d_base = Q_d_base;
+    env.V_m_base = V_m_base;
+    env.V_angle_base = V_angle_base;
+    env.V_r_base = V_r_base;
+    env.V_i_base = V_i_base;
 
     mat_name = fullfile(output_dir, sprintf('%s_env.mat', topo_id));
     save(mat_name, '-struct', 'env');
