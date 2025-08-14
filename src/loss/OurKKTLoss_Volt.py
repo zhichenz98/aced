@@ -40,12 +40,6 @@ class OurKKTLoss(nn.Module):
             "Q_g_min",
             "Q_g_max",
             "S_max",
-            "V_r_base",
-            "V_i_base",
-            "P_d_base",
-            "Q_d_base",
-            "P_g_base",
-            "Q_g_base",
         ]:
             self.register_buffer(k, env[k])
 
@@ -78,6 +72,8 @@ class OurKKTLoss(nn.Module):
             V_i[:, self.sbus_idx]
         )
 
+        # print('1', KKT_error.mean())
+
         # 3. Power Generation Violation
         # Power generation on generator buses only
         P_g_gbus = P_g[:, self.gbus_idx]
@@ -89,12 +85,16 @@ class OurKKTLoss(nn.Module):
         KKT_error += (torch.relu(Q_g_gbus - self.Q_g_max)).sum(dim=1)
         KKT_error += (torch.relu(self.Q_g_min - Q_g_gbus)).sum(dim=1)
 
+        # print('3', KKT_error.mean())
+
         # 4. Voltage Violation
         V_mag_sq = V_r ** 2 + V_i ** 2
 
         # inequality constraints
         KKT_error += (torch.relu(V_mag_sq - self.V_max ** 2)).sum(dim=1)
         KKT_error += (torch.relu(self.V_min ** 2 - V_mag_sq)).sum(dim=1)
+
+        # print('4', KKT_error.mean())
 
         # 5. Line Flow Violation (use S_max only)
         V_r_diff = V_r[:, self.branches[:, 0]] - V_r[:, self.branches[:, 1]]  # (bs, n_line)
@@ -115,5 +115,9 @@ class OurKKTLoss(nn.Module):
         # Make sure broadcast shapes align: (bs, n_line) - (n_line,) -> ok
         KKT_error += torch.relu(S_from_sq - S_max_sq).sum(dim=1)
         KKT_error += torch.relu(S_to_sq - S_max_sq).sum(dim=1)
+
+        # print('5', KKT_error.mean())
+
+        # import pdb; pdb.set_trace()
 
         return KKT_error

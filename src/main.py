@@ -9,11 +9,11 @@ import pandas as pd
 import os
 import argparse
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from tqdm import tqdm
 
 from model.MLP import MLP
-from loss.OurKKTLoss_MVA import OurKKTLoss
+from loss.OurKKTLoss_Volt import OurKKTLoss
 from utils.data import load_env_mat, load_csv
 from metric.r2 import r2_by_metric_by_bus, r2_by_metric
 
@@ -55,6 +55,8 @@ def load_and_preprocess(env, args):
         X_tr = X_tr - X_mean
         X_val = X_val - X_mean
 
+        X_mean = torch.from_numpy(X_mean).to(args.dtype)
+
     else:
         raise NotImplementedError
 
@@ -65,11 +67,13 @@ def load_and_preprocess(env, args):
         Y_tr = Y_tr - Y_mean
         Y_val = Y_val - Y_mean
 
+        Y_mean = torch.from_numpy(Y_mean).to(args.dtype)
+
     else:
         raise NotImplementedError
 
-    dataset_tr = TensorDataset(torch.from_numpy(X_tr), torch.from_numpy(Y_tr))
-    dataset_val = TensorDataset(torch.from_numpy(X_val), torch.from_numpy(Y_val))
+    dataset_tr = TensorDataset(torch.from_numpy(X_tr).to(args.dtype), torch.from_numpy(Y_tr).to(args.dtype))
+    dataset_val = TensorDataset(torch.from_numpy(X_val).to(args.dtype), torch.from_numpy(Y_val).to(args.dtype))
 
     return dataset_tr, dataset_val, X_mean, X_std, Y_mean, Y_std
 
@@ -81,7 +85,7 @@ def test_kkt_loss(args):
         env['n_bus'] = len(env['V_max'])
 
     # load data, build dataloader
-    dataset_tr, dataset_val = load_and_preprocess(env, args)
+    dataset_tr, dataset_val, X_mean, X_std, Y_mean, Y_std = load_and_preprocess(env, args)
     dataloader_tr = DataLoader(dataset_tr, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     dataloader_val = DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
@@ -90,10 +94,13 @@ def test_kkt_loss(args):
     for i, (X, Y) in enumerate(tqdm(dataloader_val)):
         X, Y = X.to(device=args.device, dtype=args.dtype), Y.to(device=args.device, dtype=args.dtype)
 
-        V_r, V_i, P_g, Q_g = torch.unbind(Y, dim=2)  # (bs, n_node, 4) to 4 * (bs, n_node)
+        X += X_mean
+        Y += Y_mean
+
+        V_r, V_i = torch.unbind(Y, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
         P_d, Q_d = torch.unbind(X, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
 
-        unsup_loss = unsupervised_loss_func(V_r, V_i, P_g, Q_g, P_d, Q_d).mean()
+        unsup_loss = unsupervised_loss_func(V_r, V_i, P_d, Q_d).mean()
 
         print(unsup_loss)
 
@@ -172,10 +179,10 @@ def main(args):
             # print(sup_loss.shape)
 
             if args.use_unsupervised_loss and epoch > 100:
-                V_r, V_i, P_g, Q_g = torch.unbind(Y_pred, dim=2)  # (bs, n_node, 4) to 4 * (bs, n_node)
+                V_r, V_i = torch.unbind(Y_pred, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
                 P_d, Q_d = torch.unbind(X, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
 
-                unsup_loss = unsupervised_loss_func(V_r, V_i, P_g, Q_g, P_d, Q_d).mean()
+                unsup_loss = unsupervised_loss_func(V_r, V_i, P_d, Q_d).mean()
                 # print(unsup_loss.shape)
 
                 if i == 0:
@@ -297,5 +304,5 @@ if __name__ == '__main__':
     args = args_parser()
     setup_seed(args.seed)
     torch.set_num_threads(args.num_threads)
-    main(args)
-    # test_kkt_loss(args)
+    # main(args)
+    test_kkt_loss(args)
