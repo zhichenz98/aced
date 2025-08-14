@@ -8,7 +8,7 @@ class MLP(nn.Module):
             self,
             n_nodes: int,
             n_feats: int = 2,
-            n_outputs: int = 4,
+            n_outputs: int = 2,
             hidden_dim: int = 64,
             n_layers: int = 2,
             activation: str = 'relu',
