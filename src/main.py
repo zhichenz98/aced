@@ -40,50 +40,38 @@ def load_and_preprocess(env, args):
 
     df_tr, df_val = train_test_split(df, train_size=args.train_ratio, shuffle=False)
 
-    # TODO: This normalization has NO GENERALIZATION at all. remember to change it.
-    if args.normalize_by == 'base':
-        mean = np.concatenate([
-            env['P_d_base'],
-            env['Q_d_base'],
-            env['V_r_base'],
-            env['V_i_base']
-        ], axis=0)
-        std = None
-
-        df_tr = df_tr - mean
-        df_val = df_val - mean
-
-    elif args.normalize_by == 'mean':
-        mean = df_tr.mean()
-        std = None
-
-        df_tr = df_tr - mean
-        df_val = df_val - mean
-
-    elif args.normalize_by == 'mean_std':
-
-        mean = df_tr.mean()
-        std = df_tr.std().replace(0, 1)
-
-        df_tr = (df_tr - mean) / std
-        df_val = (df_val - mean) / std
-
-    else:
-        mean = None
-        std = None
-
-    print(df_tr.describe())
-
     # All with shape (batch size, number of buses, number of metrics)
     X_tr = np.stack([df_tr[P_d_columns].values, df_tr[Q_d_columns].values], axis=2)
     X_val = np.stack([df_val[P_d_columns].values, df_val[Q_d_columns].values], axis=2)
     Y_tr = np.stack([df_tr[V_r_columns].values, df_tr[V_i_columns].values], axis=2)
     Y_val = np.stack([df_val[V_r_columns].values, df_val[V_i_columns].values], axis=2)
 
+    # Normalization
+
+    if args.normalize_x_by == 'base':
+        X_mean = np.stack([env['P_d_base'], env['Q_d_base']], axis=1)  # n_bus * 2
+        X_std = None
+
+        X_tr = X_tr - X_mean
+        X_val = X_val - X_mean
+
+    else:
+        raise NotImplementedError
+
+    if args.normalize_y_by == 'base':
+        Y_mean = np.stack([env['V_r_base'], env['V_i_base']], axis=1)  # n_bus * 2
+        Y_std = None
+
+        Y_tr = Y_tr - Y_mean
+        Y_val = Y_val - Y_mean
+
+    else:
+        raise NotImplementedError
+
     dataset_tr = TensorDataset(torch.from_numpy(X_tr), torch.from_numpy(Y_tr))
     dataset_val = TensorDataset(torch.from_numpy(X_val), torch.from_numpy(Y_val))
 
-    return dataset_tr, dataset_val
+    return dataset_tr, dataset_val, X_mean, X_std, Y_mean, Y_std
 
 
 def test_kkt_loss(args):
@@ -119,14 +107,14 @@ def main(args):
         env['n_bus'] = len(env['V_max'])
 
     # load data, build dataloader
-    dataset_tr, dataset_val = load_and_preprocess(env, args)
+    dataset_tr, dataset_val, X_mean, X_std, Y_mean, Y_std = load_and_preprocess(env, args)
     dataloader_tr = DataLoader(dataset_tr, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     dataloader_val = DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     if args.model == 'mlp':
         model = MLP(n_nodes=env['n_bus'], n_feats=2, n_outputs=2, hidden_dim=64, n_layers=2, activation='gelu')
-    elif args.model == 'mean':
-        model = Mean(n_nodes=env['n_bus'], n_outputs=2)
+    else:
+        raise ValueError(f'Unknown model: {args.model}')
 
     if args.optimizer == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -173,6 +161,7 @@ def main(args):
     for epoch in range(args.epochs):
 
         # Train
+        model.train()
         for i, (X, Y) in enumerate(tqdm(dataloader_tr)):
             X, Y = X.to(device=args.device, dtype=args.dtype), Y.to(device=args.device, dtype=args.dtype)
 
@@ -204,6 +193,7 @@ def main(args):
 
         # Val
         if (epoch + 1) % args.eval_every_k_steps == 0:
+            model.eval()
             all_Y_pred = []
             all_Y = []
 
@@ -211,6 +201,17 @@ def main(args):
                 for i, (X, Y) in enumerate(tqdm(dataloader_val)):
                     X, Y = X.to(device=args.device, dtype=args.dtype), Y.to(device=args.device, dtype=args.dtype)
                     Y_pred = model(X)
+
+                    if Y_std is not None:
+                        # print('std')
+                        Y_pred = Y_pred * Y_std
+                        Y = Y * Y_std
+
+                    if Y_mean is not None:
+                        # print('mean')
+                        Y_pred = Y_pred + Y_mean
+                        Y = Y + Y_mean
+
                     all_Y_pred.append(Y_pred)
                     all_Y.append(Y)
 
@@ -231,7 +232,9 @@ def args_parser():
 
     parser.add_argument('--data_path', type=str, default='../data/case39/results_case39_sigma0.01_bias0.00.csv')
 
-    parser.add_argument('--normalize_by', type=str, default='base', choices=['base', 'mean'])
+    parser.add_argument('--normalize_x_by', type=str, default='base', choices=['base', 'mean'])
+
+    parser.add_argument('--normalize_y_by', type=str, default='base', choices=['base', 'mean'])
 
     parser.add_argument('--train_ratio', type=float, default=0.5)
 
