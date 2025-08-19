@@ -87,7 +87,7 @@ def load_env_mat(mat_path: str, device="cpu", dtype=torch.float32):
         V_i_base=V_i_base,
         P_d_base=P_d_base / 100,
         Q_d_base=Q_d_base / 100,
-        S_max=S_max,
+        S_max=S_max / 100,
         baseMVA=baseMVA,
     )
     return env

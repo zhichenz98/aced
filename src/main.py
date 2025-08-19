@@ -38,7 +38,13 @@ def load_and_preprocess(env, args):
 
     df = df[all_columns].copy()  # only use the subset
 
-    df_tr, df_val = train_test_split(df, train_size=args.train_ratio, shuffle=False)
+    # df_tr, df_val = train_test_split(df, train_size=args.train_ratio, shuffle=False)
+    train_size = int(len(df) * args.train_ratio)
+    val_size = int(len(df) * args.val_ratio)
+    df_tr = df.iloc[:train_size]
+    df_val = df.iloc[-val_size:]
+
+    print(len(df), len(df_tr), len(df_val))
 
     # All with shape (batch size, number of buses, number of metrics)
     X_tr = np.stack([df_tr[P_d_columns].values, df_tr[Q_d_columns].values], axis=2)
@@ -86,7 +92,7 @@ def test_kkt_loss(args):
 
     # load data, build dataloader
     dataset_tr, dataset_val, X_mean, X_std, Y_mean, Y_std = load_and_preprocess(env, args)
-    dataloader_tr = DataLoader(dataset_tr, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    dataloader_tr = DataLoader(dataset_tr, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     dataloader_val = DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     unsupervised_loss_func = OurKKTLoss(env=env)
@@ -141,7 +147,7 @@ def main(args):
     else:
         raise ValueError(f'Unknown supervised loss: {args.supervised_loss}')
 
-    if args.unsupervised_loss == 'our_kkt_mva':
+    if args.unsupervised_loss == 'kkt':
         unsupervised_loss_func = OurKKTLoss(env=env)
         args.use_unsupervised_loss = True
     elif args.unsupervised_loss == 'none':
@@ -178,11 +184,16 @@ def main(args):
 
             # print(sup_loss.shape)
 
-            if args.use_unsupervised_loss and epoch > 100:
-                V_r, V_i = torch.unbind(Y_pred, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
+            if args.use_unsupervised_loss:
+                X = X + X_mean
+                Y = Y + Y_mean
+
+                V_r, V_i = torch.unbind(Y, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
                 P_d, Q_d = torch.unbind(X, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
 
                 unsup_loss = unsupervised_loss_func(V_r, V_i, P_d, Q_d).mean()
+
+                # unsup_loss = unsupervised_loss_func(V_r, V_i, P_d, Q_d).mean() / 10000
                 # print(unsup_loss.shape)
 
                 if i == 0:
@@ -245,6 +256,8 @@ def args_parser():
 
     parser.add_argument('--train_ratio', type=float, default=0.5)
 
+    parser.add_argument('--val_ratio', type=float, default=0.5)
+
     parser.add_argument('--model', type=str, default='mlp')
 
     parser.add_argument('--epochs', type=int, default=100)
@@ -304,5 +317,5 @@ if __name__ == '__main__':
     args = args_parser()
     setup_seed(args.seed)
     torch.set_num_threads(args.num_threads)
-    # main(args)
-    test_kkt_loss(args)
+    main(args)
+    # test_kkt_loss(args)
