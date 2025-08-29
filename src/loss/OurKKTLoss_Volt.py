@@ -101,20 +101,21 @@ class OurKKTLoss(nn.Module):
         V_i_diff = V_i[:, self.branches[:, 0]] - V_i[:, self.branches[:, 1]]
         I_r = -V_r_diff * self.G_line + V_i_diff * self.B_line
         I_i = -V_i_diff * self.G_line - V_r_diff * self.B_line
-        I_mag_sq = I_r ** 2 + I_i ** 2
+        I_mag = torch.sqrt(I_r ** 2 + I_i ** 2)
+
+        V_mag = torch.sqrt(V_mag_sq)
 
         # voltage magnitude squared at each bus
-        V_from_mag_sq = V_mag_sq[:, self.branches[:, 0]]  # (bs, n_line)
-        V_to_mag_sq = V_mag_sq[:, self.branches[:, 1]]  # (bs, n_line)
+        V_from_mag = V_mag[:, self.branches[:, 0]]  # (bs, n_line)
+        V_to_mag = V_mag[:, self.branches[:, 1]]  # (bs, n_line)
 
         # apparent power |S|^2 = |V|^2 * |I|^2
-        S_from_sq = V_from_mag_sq * I_mag_sq
-        S_to_sq = V_to_mag_sq * I_mag_sq
+        S_from = V_from_mag * I_mag
+        S_to = V_to_mag * I_mag
 
-        S_max_sq = self.S_max ** 2  # (n_line,)
         # Make sure broadcast shapes align: (bs, n_line) - (n_line,) -> ok
-        KKT_error += torch.relu(S_from_sq - S_max_sq).sum(dim=1)
-        KKT_error += torch.relu(S_to_sq - S_max_sq).sum(dim=1)
+        KKT_error += torch.relu(S_from - self.S_max).sum(dim=1)
+        KKT_error += torch.relu(S_to - self.S_max).sum(dim=1)
 
         # print('5', KKT_error.mean())
 

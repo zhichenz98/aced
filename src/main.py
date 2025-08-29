@@ -110,7 +110,7 @@ def test_kkt_loss(args):
 
         print(unsup_loss)
 
-    exit()
+        exit()
 
 
 def main(args):
