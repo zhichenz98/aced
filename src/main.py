@@ -147,10 +147,12 @@ def main(args):
     else:
         raise ValueError(f'Unknown supervised loss: {args.supervised_loss}')
 
+
     if args.unsupervised_loss == 'kkt':
         unsupervised_loss_func = OurKKTLoss(env=env)
         args.use_unsupervised_loss = True
     elif args.unsupervised_loss == 'none':
+        unsupervised_loss_func = OurKKTLoss(env=env)
         args.use_unsupervised_loss = False
 
     else:
@@ -186,9 +188,9 @@ def main(args):
 
             if args.use_unsupervised_loss:
                 X = X + X_mean
-                Y = Y + Y_mean
+                Y_pred = Y_pred + Y_mean
 
-                V_r, V_i = torch.unbind(Y, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
+                V_r, V_i = torch.unbind(Y_pred, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
                 P_d, Q_d = torch.unbind(X, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
 
                 unsup_loss = unsupervised_loss_func(V_r, V_i, P_d, Q_d).mean()
@@ -197,8 +199,11 @@ def main(args):
                 # print(unsup_loss.shape)
 
                 if i == 0:
-                    print(sup_loss.item(), unsup_loss.item())
-                loss = sup_loss + unsup_loss
+                    tqdm.write(f'Epoch {epoch + 1}/{args.epochs}')
+                    tqdm.write(f'Train sup_loss: {sup_loss.item()}')
+                    tqdm.write(f'Train unsup_loss: {unsup_loss.item()}')
+
+                loss = sup_loss + 0.001 * unsup_loss
 
             else:
                 loss = sup_loss
@@ -212,6 +217,8 @@ def main(args):
         # Val
         if (epoch + 1) % args.eval_every_k_steps == 0:
             model.eval()
+
+            all_X = []
             all_Y_pred = []
             all_Y = []
 
@@ -230,17 +237,36 @@ def main(args):
                         Y_pred = Y_pred + Y_mean
                         Y = Y + Y_mean
 
+                    X = X + X_mean
+
+                    all_X.append(X)
                     all_Y_pred.append(Y_pred)
                     all_Y.append(Y)
 
-            all_Y_pred = torch.cat(all_Y_pred, dim=0).cpu().numpy()
-            all_Y = torch.cat(all_Y).cpu().numpy()
-
-            # all_Y_pred = np.broadcast_to(all_Y.mean(axis=0), all_Y.shape)
-
             tqdm.write(f'Epoch {epoch + 1}/{args.epochs}')
+
+            all_X = torch.cat(all_X, dim=0).cpu()
+            all_Y_pred = torch.cat(all_Y_pred, dim=0).cpu()
+            all_Y = torch.cat(all_Y, dim=0).cpu()
+
+            V_r, V_i = torch.unbind(all_Y_pred, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
+            P_d, Q_d = torch.unbind(all_X, dim=2)  # (bs, n_node, 2) to 2 * (bs, n_node)
+
+            unsup_loss = unsupervised_loss_func(V_r, V_i, P_d, Q_d).mean()
+
+            print(V_r)
+
+            tqdm.write(f'Val unsup_loss: {unsup_loss}')
+
+
+            all_X = all_X.numpy()
+            all_Y_pred = all_Y_pred.numpy()
+            all_Y = all_Y.numpy()
+
             tqdm.write(
-                f'MSE: {mean_squared_error(all_Y.reshape(-1), all_Y_pred.reshape(-1))}; {args.metric}: {metric_func(all_Y_pred, all_Y)}')
+                f'Val MSE: {mean_squared_error(all_Y.reshape(-1), all_Y_pred.reshape(-1))}; {args.metric}: {metric_func(all_Y_pred, all_Y)}')
+
+
 
 
 def args_parser():
