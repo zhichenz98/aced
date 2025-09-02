@@ -5,7 +5,7 @@ generate_data();
 
 function generate_data()
 
-    case_name = 'case39'; 
+    case_name = 'case118'; 
     output_dir = fullfile(pwd, 'data', case_name);
     if ~exist(output_dir, 'dir')
         mkdir(output_dir);
